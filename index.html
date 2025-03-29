@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VividDH - Your Personal Navigation Station">
+    <meta name="keywords" content="navigation, bookmarks, VividDH, website management">
+    <meta name="author" content="VividDH">
+    <title>VividDH</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <meta property="og:title" content="VividDH">
+    <meta property="og:description" content="Organize and access all your favorite websites in one place">
+    <meta property="og:url" content="https://vividdh.online">
+</head>
+<body>
+    <!-- 头部导航 -->
+    <header class="header">
+        <div class="header-left">
+            <!-- 移动设备分类按钮 -->
+            <button class="category-btn mobile-only" aria-label="Categories">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <!-- 网站标志 -->
+            <div class="logo" data-i18n="app_name">VividDH</div>
+            
+            <!-- 搜索框 -->
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="searchInput" data-i18n-placeholder="search_placeholder" placeholder="Search websites...">
+            </div>
+        </div>
+        
+        <div class="header-right">
+            <!-- 添加网站按钮 -->
+            <button id="addSiteBtn" class="add-btn">
+                <i class="fas fa-plus"></i>
+                <span data-i18n="add_new">Add Site</span>
+            </button>
+            
+            <!-- 功能按钮组 -->
+            <div class="function-btns">
+                <button id="manageCategories" class="function-btn" data-function="manage_categories" title="Manage Categories">
+                    <i class="fas fa-folder-tree"></i>
+                </button>
+                <button id="importData" class="function-btn" data-function="import_data" title="Import Data">
+                    <i class="fas fa-file-import"></i>
+                </button>
+                <button id="exportData" class="function-btn" data-function="export_data" title="Export Data">
+                    <i class="fas fa-file-export"></i>
+                </button>
+                <button id="switchMode" class="function-btn" data-function="switch_mode" title="Switch Mode" style="display: none;">
+                    <i class="fas fa-user-shield"></i>
+                </button>
+            </div>
+            
+            <!-- 语言选择 -->
+            <div class="language-select-container">
+                <select id="languageSelect" class="language-select">
+                    <option value="en-US" data-i18n="english">English</option>
+                    <option value="zh-CN" data-i18n="chinese">Chinese</option>
+                </select>
+            </div>
+        </div>
+    </header>
+    
+    <!-- 主内容区 -->
+    <div class="main-wrapper">
+        <!-- 侧边栏分类菜单 -->
+        <div class="sidebar">
+            <div id="categoryMenu" class="category-list">
+                <!-- 分类将通过JS动态渲染 -->
+            </div>
+        </div>
+        
+        <!-- 主内容容器 -->
+        <div class="main-container">
+            <div class="current-category">
+                <h2 id="currentCategoryTitle" data-i18n="all_sites">All Sites</h2>
+            </div>
+            
+            <div id="sitesGrid" class="sites-grid">
+                <!-- 网站卡片将通过JS动态渲染 -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- 添加/编辑网站模态框 -->
+    <div id="addSiteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="addSiteModalTitle" data-i18n="add_new_site">Add New Site</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addSiteForm">
+                    <div class="form-group">
+                        <label for="siteName" data-i18n="site_name">Site Name</label>
+                        <input type="text" id="siteName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="siteUrl" data-i18n="site_url">Site URL</label>
+                        <input type="text" id="siteUrl" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="siteCategory" data-i18n="site_category">Category</label>
+                        <select id="siteCategory">
+                            <!-- 分类选项将通过JS动态生成 -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="siteIcon" data-i18n="choose_icon">Choose Icon</label>
+                        <div class="file-input-container">
+                            <input type="file" id="siteIcon" accept="image/*">
+                            <button type="button" class="custom-file-btn" id="chooseFileBtn" data-i18n="choose_file">Choose File</button>
+                            <span id="fileNameDisplay" class="file-name" data-i18n="no_file_selected">No file selected</span>
+                        </div>
+                        <div class="icon-note" data-i18n="icon_note">Leave empty to fetch favicon automatically</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="siteNotes" data-i18n="site_notes">Notes (e.g. account info)</label>
+                        <textarea id="siteNotes"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" data-i18n="cancel">Cancel</button>
+                        <button type="submit" class="submit-btn" data-i18n="save">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 分类管理模态框 -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="category_management">Category Management</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="add-category">
+                    <input type="text" id="newCategoryName" data-i18n-placeholder="new_category_name" placeholder="New category name">
+                    <button id="addCategoryBtn" data-i18n="add">Add</button>
+                </div>
+                
+                <div id="categoryList" class="category-list">
+                    <!-- 分类列表将通过JS动态生成 -->
+                </div>
+                
+                <div class="form-actions">
+                    <button id="saveCategoriesBtn" class="submit-btn" data-i18n="save_order">Save Order</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 密码验证模态框 -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="verify_password">Verify Password</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label for="masterPassword" data-i18n="enter_master_password">Enter master password</label>
+                        <input type="password" id="masterPassword" required>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" data-i18n="cancel">Cancel</button>
+                        <button type="submit" class="submit-btn" data-i18n="confirm">Confirm</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="context-menu">
+        <div id="menuEdit" class="menu-item">
+            <i class="fas fa-edit"></i>
+            <span data-i18n="edit">Edit</span>
+        </div>
+        <div id="menuDelete" class="menu-item">
+            <i class="fas fa-trash"></i>
+            <span data-i18n="delete">Delete</span>
+        </div>
+        <div id="menuCopyUrl" class="menu-item">
+            <i class="fas fa-copy"></i>
+            <span data-i18n="copy_url">Copy URL</span>
+        </div>
+        <div id="menuCopyPassword" class="menu-item">
+            <i class="fas fa-key"></i>
+            <span data-i18n="copy_password">Copy Notes</span>
+        </div>
+    </div>
+    
+    <!-- 通知提示 -->
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <div class="notification-icon"></div>
+            <div class="notification-message"></div>
+        </div>
+    </div>
+    
+    <!-- JS库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- 应用JS -->
+    <script src="js/i18n.js"></script>
+    <script src="js/dataManager.js"></script>
+    <script src="js/uiRenderer.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html> 
