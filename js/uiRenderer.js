@@ -126,13 +126,25 @@ class UIRenderer {
      */
     initLanguage() {
         try {
+            // 从本地存储获取用户保存的语言设置
+            const savedLang = localStorage.getItem('language');
+            if (savedLang && (savedLang === 'zh-CN' || savedLang === 'en-US')) {
+                if (typeof setLanguage === 'function') {
+                    setLanguage(savedLang);
+                }
+            }
+            
             // 应用当前语言到页面
             this.updatePageLanguage();
             
             // 初始化语言选择下拉框
             this.initLanguageSelect();
         } catch (error) {
-            console.error('初始化语言设置失败:', error);
+            // 初始化失败时使用默认语言
+            if (typeof setLanguage === 'function') {
+                setLanguage('en-US');
+            }
+            this.updatePageLanguage();
         }
     }
     
@@ -142,15 +154,21 @@ class UIRenderer {
     initLanguageSelect() {
         const languageSelect = document.getElementById('languageSelect');
         if (languageSelect) {
-            // 设置下拉框当前值为当前语言
-            const currentLang = getCurrentLanguage();
-            languageSelect.value = currentLang;
-            
-            // 监听语言选择变化
-            this.safeAddEventListener(languageSelect, 'change', () => {
-                const selectedLang = languageSelect.value;
-                this.handleLanguageChange(selectedLang);
-            });
+            try {
+                // 设置下拉框当前值为当前语言
+                const currentLang = typeof getCurrentLanguage === 'function' ? 
+                    getCurrentLanguage() : 'en-US';
+                languageSelect.value = currentLang;
+                
+                // 监听语言选择变化
+                this.safeAddEventListener(languageSelect, 'change', () => {
+                    const selectedLang = languageSelect.value;
+                    this.handleLanguageChange(selectedLang);
+                });
+            } catch (error) {
+                // 出错时使用默认语言
+                languageSelect.value = 'en-US';
+            }
         }
     }
     
@@ -159,52 +177,99 @@ class UIRenderer {
      * @param {string} langCode - 语言代码
      */
     handleLanguageChange(langCode) {
-        console.log('切换语言到:', langCode);
-        
-        // 设置语言
-        if (typeof setLanguage === 'function') {
-            setLanguage(langCode);
-        } else {
-            console.error('语言切换功能不可用');
-            this.showNotification('语言切换功能不可用', 'error');
+        if (!langCode || (langCode !== 'zh-CN' && langCode !== 'en-US')) {
+            this.showNotification(t('language_changed') || 'Language change failed', 'error');
             return;
         }
         
-        // 使用i18n.js中的updatePageText函数更新页面文本
-        updatePageText();
-        
-        // 重新渲染界面
-        this.renderCategoryMenu();
-        this.renderSites();
-        
-        // 显示通知
-        this.showNotification(t('language_changed'), 'success');
+        try {
+            // 设置语言
+            if (typeof setLanguage === 'function') {
+                setLanguage(langCode);
+            } else {
+                this.showNotification(t('feature_disabled') || 'Language switching is disabled', 'error');
+                return;
+            }
+            
+            // 使用i18n.js中的updatePageText函数更新页面文本
+            if (typeof updatePageText === 'function') {
+                updatePageText();
+            }
+            
+            // 重新渲染界面
+            this.renderCategoryMenu();
+            this.renderSites();
+            
+            // 显示通知
+            this.showNotification(t('language_changed') || 'Language changed', 'success');
+        } catch (error) {
+            this.showNotification(t('feature_disabled') || 'Language switching failed', 'error');
+        }
     }
     
     /**
      * 更新页面中所有文本为当前语言
      */
     updatePageLanguage() {
-        // 使用i18n.js中的updatePageText函数
-        if (typeof updatePageText === 'function') {
-            updatePageText();
-        } else {
-            // 后备方案
-            // 更新所有带有data-i18n属性的元素
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                el.textContent = t(key);
-            });
+        try {
+            // 使用i18n.js中的updatePageText函数
+            if (typeof updatePageText === 'function') {
+                updatePageText();
+            } else {
+                // 后备方案
+                this.updatePageTextManually();
+            }
             
-            // 更新所有带有data-i18n-placeholder属性的输入框
-            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-                const key = el.getAttribute('data-i18n-placeholder');
-                el.placeholder = t(key);
-            });
+            // 更新分类菜单和网站卡片中的分类名称
+            this.renderCategoryMenu();
+            this.renderSites();
             
-            // 更新页面标题
-            document.title = t('app_name') + ' - ' + (getCurrentLanguage() === 'zh-CN' ? '您的个人网站管理中心' : 'Your Personal Website Manager');
+            // 更新文档标题
+            document.title = typeof t === 'function' ? 
+                t('app_name') + ' - ' + (getCurrentLanguage() === 'zh-CN' ? '您的个人网站管理中心' : 'Your Personal Website Manager') : 
+                'VividDH - Your Personal Website Manager';
+        } catch (error) {
+            // 出错处理
         }
+    }
+    
+    /**
+     * 手动更新页面文本（作为后备方案）
+     */
+    updatePageTextManually() {
+        if (typeof t !== 'function') return;
+        
+        // 更新所有带有data-i18n属性的元素
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (key) {
+                el.textContent = t(key);
+            }
+        });
+        
+        // 更新所有带有data-i18n-placeholder属性的元素的placeholder
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (key) {
+                el.placeholder = t(key);
+            }
+        });
+        
+        // 更新所有带有data-i18n-title属性的元素的title
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            if (key) {
+                el.title = t(key);
+            }
+        });
+        
+        // 更新带有title属性的功能按钮
+        document.querySelectorAll('.function-btn').forEach(btn => {
+            const title = btn.getAttribute('data-function');
+            if (title) {
+                btn.setAttribute('title', t(title));
+            }
+        });
     }
     
     /**
@@ -244,38 +309,72 @@ class UIRenderer {
             this.safeAddEventListener(this.dom.addSiteForm, 'submit', safeHandleAddSite);
         }
         
-        // 使用事件委托处理模态框关闭按钮事件
-        // 这样即使模态框是动态创建的也能正确响应
-        this.safeAddEventListener(document, 'click', (e) => {
-            // 检查点击的是否是关闭按钮
-            if (e.target.classList.contains('close-btn') || 
-                e.target.parentElement.classList.contains('close-btn') ||
-                e.target.classList.contains('cancel-btn')) {
-                
-                // 查找最近的模态框
-                const modal = e.target.closest('.modal');
-                if (modal) {
-                    modal.style.display = 'none';
-                    
-                    // 重置编辑模式
-                    this.state.isEditing = false;
-                } else {
-                    // 如果找不到特定模态框，关闭所有模态框
-                    document.querySelectorAll('.modal').forEach(modal => {
-                        modal.style.display = 'none';
-                    });
-                    // 重置编辑模式
-                    this.state.isEditing = false;
-                }
-            }
-            
-            // 点击文档任何地方关闭右键菜单
+        // 点击页面任意位置关闭右键菜单
+        document.addEventListener('click', (e) => {
             if (this.dom.contextMenu && this.dom.contextMenu.style.display === 'block') {
-                // 如果点击的不是右键菜单本身及其子元素
+                // 如果点击的不是菜单内部元素，则关闭菜单
                 if (!this.dom.contextMenu.contains(e.target)) {
                     this.dom.contextMenu.style.display = 'none';
                 }
             }
+        });
+        
+        // 按下ESC键关闭任何打开的模态框或右键菜单
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // 关闭右键菜单
+                if (this.dom.contextMenu) {
+                    this.dom.contextMenu.style.display = 'none';
+                }
+                
+                // 关闭所有模态框
+                document.querySelectorAll('.modal').forEach(modal => {
+                    if (modal.style.display !== 'none') {
+                        modal.style.display = 'none';
+                    }
+                });
+            }
+        });
+        
+        // 点击关闭按钮关闭模态框
+        document.querySelectorAll('.modal .close-btn, .modal .cancel-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const modal = e.target.closest('.modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+        
+        // 点击模态框外部区域关闭模态框
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+        
+        // 修正z-index问题，确保顶部的模态框有最高z-index
+        const adjustZIndex = () => {
+            const modals = [...document.querySelectorAll('.modal')].filter(m => 
+                m.style.display && m.style.display !== 'none');
+            modals.forEach((modal, i) => {
+                modal.style.zIndex = 1000 + i;
+            });
+        };
+        
+        // 监听模态框显示变化
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'style') {
+                    adjustZIndex();
+                }
+            });
+        });
+        
+        document.querySelectorAll('.modal').forEach(modal => {
+            observer.observe(modal, { attributes: true });
         });
         
         // 分类管理按钮点击
@@ -387,28 +486,26 @@ class UIRenderer {
      * 初始化UI
      */
     init() {
-        try {
-            console.log('初始化UI...');
-            
-            // 确保事件绑定只执行一次
-            this.bindEvents();
-            
-            // 渲染分类菜单
-            this.renderCategoryMenu();
-            
-            // 渲染网站列表
-            this.renderSites();
-            
-            // 检查是否有权访问敏感数据
-            this.checkSensitiveAccess();
-            
-            // 初始化文件选择按钮
-            this.initFileUpload();
-            
-            console.log('UI初始化完成');
-        } catch (error) {
-            console.error('UI初始化失败:', error);
-        }
+        // 初始化当前分类
+        this.state.currentCategory = 'ALL';
+
+        // 渲染分类菜单
+        this.renderCategoryMenu();
+        
+        // 初始渲染所有网站
+        this.renderSites();
+        
+        // 绑定事件
+        this.bindEvents();
+        
+        // 检查敏感访问权限
+        this.checkSensitiveAccess();
+        
+        // 设置自动备份
+        dataManager.setupAutoBackup();
+        
+        // 返回当前实例，支持链式调用
+        return this;
     }
     
     /**
@@ -492,16 +589,30 @@ class UIRenderer {
      * @returns {string} - 翻译键名
      */
     getCategoryTranslationKey(category) {
-        // 将中文分类名转换为对应的国际化键名
-        const categoryMap = {
+        // 检查分类是否已经是翻译键
+        if (category === 'frequently_used' || category === 'shopping' || 
+            category === 'tools' || category === 'learning' || category === 'entertainment') {
+            return category;
+        }
+        
+        // 基于中英文值反向查找翻译键
+        const reverseMap = {
+            // 中文分类名映射
             '常用': 'frequently_used',
             '购物': 'shopping',
             '工具': 'tools',
             '学习': 'learning',
-            '娱乐': 'entertainment'
+            '娱乐': 'entertainment',
+            // 英文分类名映射
+            'Frequently Used': 'frequently_used',
+            'Shopping': 'shopping',
+            'Tools': 'tools',
+            'Learning': 'learning',
+            'Entertainment': 'entertainment'
         };
         
-        return categoryMap[category] || category;
+        // 返回找到的翻译键或原始分类名
+        return reverseMap[category] || category;
     }
     
     /**
@@ -509,7 +620,18 @@ class UIRenderer {
      * @param {string} category - 分类名称
      */
     changeCategory(category) {
+        // 统一将"全部"处理为"ALL"常量，保持内部一致性
+        if (category === '全部') {
+            category = 'ALL';
+        }
+        
         this.state.currentCategory = category;
+        
+        // 清除搜索查询，确保搜索框显示为空
+        if (this.state.searchQuery && this.dom.searchInput) {
+            this.state.searchQuery = '';
+            this.dom.searchInput.value = '';
+        }
         
         // 更新当前分类标题
         if (this.dom.currentCategoryTitle) {
@@ -533,17 +655,26 @@ class UIRenderer {
      */
     renderSites() {
         if (!this.dom.sitesGrid) {
-            console.error('无法找到站点网格容器');
             return;
         }
         
         let sites = [];
         
         if (this.state.searchQuery) {
+            // 如果有搜索查询，优先使用搜索结果
             sites = dataManager.searchSites(this.state.searchQuery);
-        } else if (this.state.currentCategory === 'ALL') {
+            // 更新分类标题以显示搜索状态
+            if (this.dom.currentCategoryTitle) {
+                this.dom.currentCategoryTitle.textContent = t('search_results');
+            }
+        } else if (this.state.currentCategory === 'ALL' || this.state.currentCategory === '全部') {
+            // 处理全部网站类别（兼容旧的"全部"值)
             sites = dataManager.getAllSites();
+            if (this.dom.currentCategoryTitle) {
+                this.dom.currentCategoryTitle.textContent = t('all_sites');
+            }
         } else {
+            // 获取指定分类的网站
             sites = dataManager.getSitesByCategory(this.state.currentCategory);
         }
         
@@ -556,36 +687,73 @@ class UIRenderer {
         
         let html = '';
         sites.forEach(site => {
-            // 获取图标URL或使用默认图标
+            // 获取图标URL
             let iconUrl = site.iconUrl || this.getFaviconUrl(site.url);
             
-            // 准备备选图标源，用于在主图标加载失败时切换
-            const urlObj = new URL(site.url);
-            const domain = urlObj.hostname;
-            const fallbackIcons = [
-                `${urlObj.protocol}//${domain}/favicon.ico`,
-                `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
-                `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-                `https://favicon.yandex.net/favicon/${domain}`
-            ];
+            // 构建备选图标源数组
+            let fallbackIcons = [];
+            try {
+                const urlObj = new URL(site.url);
+                const domain = urlObj.hostname;
+                
+                // 添加备选图标源
+                fallbackIcons = [
+                    iconUrl, // 首选
+                    `https://www.google.com/s2/favicons?domain=${domain}&sz=64`, // Google (高质量)
+                    `https://icon.horse/icon/${domain}`, // icon.horse (备选服务)
+                    `${urlObj.protocol}//${domain}/favicon.ico` // 直接访问网站favicon
+                ];
+                
+                // 过滤掉重复的URL
+                fallbackIcons = [...new Set(fallbackIcons)];
+            } catch (e) {
+                // URL无效时使用默认图标
+                fallbackIcons = [iconUrl];
+            }
             
             // 准备默认错误处理图标 (Base64编码避免SVG转义问题)
             const defaultIcon = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjMWU4OGU1Ij48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTEgMTcuOTNjLTMuOTUtLjQ5LTctMy44NS03LTcuOTMgMC0uNjIuMDgtMS4yMS4yMS0xLjc5TDkgMTV2MWMwIDEuMS45IDIgMiAydjEuOTN6bTYuOS0yLjU0Yy0uMjYtLjgxLTEtMS4zOS0xLjktMS4zOWgtMXYtM2MwLS41NS0uNDUtMS0xLTFIOHYtMmgyYy41NSAwIDEtLjQ1IDEtMVY3aDJjMS4xIDAgMi0uOSAyLTJ2LS40MWMyLjkzIDEuMTkgNSA0LjA2IDUgNy40MSAwIDIuMDgtLjggMy45Ny0yLjEgNS4zOXoiLz48L3N2Zz4=';
             
             // 创建一个函数，生成图标的onerror处理脚本，自动尝试下一个图标源
             const generateIconFallbackScript = (icons, defaultFallback) => {
-                let script = '';
-                icons.forEach((icon, index) => {
-                    if (index < icons.length - 1) {
-                        script += `this.onerror=function(){this.src='${icons[index+1]}';this.onerror=`;
+                // 简化错误处理逻辑，减少嵌套层级
+                let safeIcons = Array.isArray(icons) ? icons.filter(url => url) : [];
+                if (safeIcons.length === 0) {
+                    return `this.onerror=null;this.src='${defaultFallback}';`;
+                }
+                
+                // 使用URL对象检查URL格式是否有效
+                safeIcons = safeIcons.filter(url => {
+                    try {
+                        new URL(url);
+                        return true;
+                    } catch(e) {
+                        return false;
                     }
                 });
-                // 添加最终的错误处理
-                script += `function(){this.src='${defaultFallback}';this.onerror=null;};`;
-                // 闭合所有嵌套的函数调用
-                for (let i = 0; i < icons.length - 1; i++) {
+                
+                // 最多使用三个备选图标，避免过长的链式调用
+                safeIcons = safeIcons.slice(0, 3);
+                
+                if (safeIcons.length === 0) {
+                    return `this.onerror=null;this.src='${defaultFallback}';`;
+                }
+                
+                // 构建错误处理脚本
+                let script = '';
+                safeIcons.forEach((icon, index) => {
+                    if (index < safeIcons.length - 1) {
+                        script += `this.onerror=function(){this.src='${safeIcons[index+1]}';`;
+                    } else {
+                        script += `this.onerror=function(){this.src='${defaultFallback}';this.onerror=null;};`;
+                    }
+                });
+                
+                // 添加闭合括号
+                for (let i = 0; i < safeIcons.length - 1; i++) {
                     script += `};`;
                 }
+                
                 return script;
             };
             
@@ -711,41 +879,95 @@ class UIRenderer {
                 
                 // 显示右键菜单
                 if (this.dom.contextMenu) {
+                    // 首先隐藏菜单以便能得到其实际尺寸
+                    this.dom.contextMenu.style.opacity = '0';
                     this.dom.contextMenu.style.display = 'block';
                     
-                    // 确保菜单不超出视口边界
-                    const menuWidth = this.dom.contextMenu.offsetWidth || 180;
-                    const menuHeight = this.dom.contextMenu.offsetHeight || 150;
-                    const viewportWidth = window.innerWidth;
-                    const viewportHeight = window.innerHeight;
-                    
-                    let left = e.pageX;
-                    let top = e.pageY;
-                    
-                    if (left + menuWidth > viewportWidth) {
-                        left = viewportWidth - menuWidth - 5;
-                    }
-                    
-                    if (top + menuHeight > viewportHeight) {
-                        top = viewportHeight - menuHeight - 5;
-                    }
-                    
-                    this.dom.contextMenu.style.left = `${left}px`;
-                    this.dom.contextMenu.style.top = `${top}px`;
+                    // 获取菜单尺寸和视口尺寸
+                    setTimeout(() => {
+                        const menuWidth = this.dom.contextMenu.offsetWidth || 180;
+                        const menuHeight = this.dom.contextMenu.offsetHeight || 150;
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+                        
+                        // 计算合适的位置
+                        let left = e.clientX; // 使用clientX而非pageX来避免滚动位置影响
+                        let top = e.clientY;
+                        
+                        // 确保右键菜单不超出屏幕
+                        if (left + menuWidth > viewportWidth) {
+                            left = viewportWidth - menuWidth - 5;
+                        }
+                        
+                        if (top + menuHeight > viewportHeight) {
+                            top = viewportHeight - menuHeight - 5;
+                        }
+                        
+                        // 确保右键菜单不会出现在屏幕外
+                        left = Math.max(5, left);
+                        top = Math.max(5, top);
+                        
+                        // 设置位置并显示
+                        this.dom.contextMenu.style.left = `${left}px`;
+                        this.dom.contextMenu.style.top = `${top}px`;
+                        this.dom.contextMenu.style.opacity = '1';
+                    }, 0);
                 }
             });
             
             // 添加触摸设备长按支持
             let touchTimeout;
+            let touchStartX, touchStartY;
+            
             card.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) return; // 只处理单指触摸
+                
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                
                 touchTimeout = setTimeout(() => {
                     this.state.selectedSiteId = id;
                     
                     if (this.dom.contextMenu) {
-                        const rect = card.getBoundingClientRect();
+                        // 首先隐藏菜单以便能得到其实际尺寸
+                        this.dom.contextMenu.style.opacity = '0';
                         this.dom.contextMenu.style.display = 'block';
-                        this.dom.contextMenu.style.left = `${rect.left + rect.width/2 - 90}px`;
-                        this.dom.contextMenu.style.top = `${rect.top + rect.height}px`;
+                        
+                        setTimeout(() => {
+                            // 获取元素位置
+                            const rect = card.getBoundingClientRect();
+                            const menuWidth = this.dom.contextMenu.offsetWidth || 180;
+                            const menuHeight = this.dom.contextMenu.offsetHeight || 150;
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+                            
+                            // 在触摸位置显示菜单
+                            let left = touchStartX;
+                            let top = touchStartY;
+                            
+                            // 确保右键菜单不超出屏幕
+                            if (left + menuWidth > viewportWidth) {
+                                left = viewportWidth - menuWidth - 5;
+                            }
+                            
+                            if (top + menuHeight > viewportHeight) {
+                                top = viewportHeight - menuHeight - 5;
+                            }
+                            
+                            // 确保右键菜单不会出现在屏幕外
+                            left = Math.max(5, left);
+                            top = Math.max(5, top);
+                            
+                            // 设置位置并显示
+                            this.dom.contextMenu.style.left = `${left}px`;
+                            this.dom.contextMenu.style.top = `${top}px`;
+                            this.dom.contextMenu.style.opacity = '1';
+                            
+                            // 提供触觉反馈（如果支持）
+                            if (window.navigator && window.navigator.vibrate) {
+                                window.navigator.vibrate(50);
+                            }
+                        }, 0);
                     }
                 }, 500);
             });
@@ -754,8 +976,21 @@ class UIRenderer {
                 clearTimeout(touchTimeout);
             });
             
-            card.addEventListener('touchmove', () => {
-                clearTimeout(touchTimeout);
+            card.addEventListener('touchmove', (e) => {
+                // 只有当移动距离超过阈值时才取消长按
+                if (e.touches.length !== 1) {
+                    clearTimeout(touchTimeout);
+                    return;
+                }
+                
+                const moveX = e.touches[0].clientX;
+                const moveY = e.touches[0].clientY;
+                const moveThreshold = 10; // 10px移动阈值
+                
+                if (Math.abs(moveX - touchStartX) > moveThreshold || 
+                    Math.abs(moveY - touchStartY) > moveThreshold) {
+                    clearTimeout(touchTimeout);
+                }
             });
         });
     }
@@ -771,25 +1006,10 @@ class UIRenderer {
             const domain = urlObj.hostname;
             
             // 使用多个favicon服务，按照可靠性排序
-            // 1. 直接从网站获取favicon.ico (最常见的favicon名称)
-            const directFavicon = `${urlObj.protocol}//${domain}/favicon.ico`;
-            
-            // 2. 使用Google的favicon服务
-            const googleFavicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-            
-            // 3. 使用DuckDuckGo的favicon服务
-            const ddgFavicon = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
-            
-            // 4. 使用Yandex的favicon服务
-            const yandexFavicon = `https://favicon.yandex.net/favicon/${domain}`;
-            
-            // 创建图像预加载系统
-            this.preloadImage(directFavicon, googleFavicon, ddgFavicon, yandexFavicon);
-            
-            // 首先尝试Google的服务，因为它提供大尺寸图标
-            return googleFavicon;
+            // 返回Google服务，它通常提供最好的兼容性
+            return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
         } catch (e) {
-            console.error('获取网站图标失败:', e);
+            // 出错时使用默认图标，避免在控制台输出错误信息
             return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjMWU4OGU1Ij48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTEgMTcuOTNjLTMuOTUtLjQ5LTctMy44NS03LTcuOTMgMC0uNjIuMDgtMS4yMS4yMS0xLjc5TDkgMTV2MWMwIDEuMS45IDIgMiAydjEuOTN6bTYuOS0yLjU0Yy0uMjYtLjgxLTEtMS4zOS0xLjktMS4zOWgtMXYtM2MwLS41NS0uNDUtMS0xLTFIOHYtMmgyYy41NSAwIDEtLjQ1IDEtMVY3aDJjMS4xIDAgMi0uOSAyLTJ2LS40MWMyLjkzIDEuMTkgNSA0LjA2IDUgNy40MSAwIDIuMDgtLjggMy45Ny0yLjEgNS4zOXoiLz48L3N2Zz4=';
         }
     }
@@ -800,26 +1020,29 @@ class UIRenderer {
      * @param {...string} urls - 图像URL列表
      */
     preloadImage(...urls) {
-        // 保存站点图标的加载状态
-        if (!this._faviconCache) {
-            this._faviconCache = new Map();
-        }
-        
-        urls.forEach(url => {
-            // 避免重复预加载
-            if (this._faviconCache.has(url)) {
-                return;
+        // 只在开发环境中进行图标预加载，减少生产环境的网络请求
+        // 因为我们已经在图像元素上使用了onerror处理
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (!this._faviconCache) {
+                this._faviconCache = new Map();
             }
             
-            const img = new Image();
-            img.onload = () => {
-                this._faviconCache.set(url, true);
-            };
-            img.onerror = () => {
-                this._faviconCache.set(url, false);
-            };
-            img.src = url;
-        });
+            urls.forEach(url => {
+                // 避免重复预加载
+                if (this._faviconCache.has(url)) {
+                    return;
+                }
+                
+                const img = new Image();
+                img.onload = () => {
+                    this._faviconCache.set(url, true);
+                };
+                img.onerror = () => {
+                    this._faviconCache.set(url, false);
+                };
+                img.src = url;
+            });
+        }
     }
     
     /**
@@ -844,10 +1067,8 @@ class UIRenderer {
             fileNameDisplay.textContent = t('no_file_selected');
         }
         
-        // 打开弹窗
-        if (this.dom.addSiteModal) {
-            this.dom.addSiteModal.style.display = 'flex';
-        }
+        // 使用通用函数打开模态框
+        this.showModal(this.dom.addSiteModal);
     }
     
     /**
@@ -874,16 +1095,9 @@ class UIRenderer {
             return;
         }
         
-        // 验证URL格式
-        let validUrl = siteUrl;
-        if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
-            validUrl = 'https://' + validUrl;
-        }
-        
-        try {
-            // 测试URL是否有效
-            new URL(validUrl);
-        } catch (e) {
+        // 使用 dataManager 验证和修复 URL
+        const validUrl = dataManager.validateAndFixUrl(siteUrl);
+        if (!validUrl) {
             this.showNotification(t('invalid_url'), 'error');
             return;
         }
@@ -943,9 +1157,7 @@ class UIRenderer {
     completeSiteAdd(site) {
         if (dataManager.addSite(site)) {
             // 关闭弹窗
-            if (this.dom.addSiteModal) {
-                this.dom.addSiteModal.style.display = 'none';
-            }
+            this.hideModal(this.dom.addSiteModal);
             
             // 显示成功提示
             this.showNotification(t('site_add_success'), 'success');
@@ -962,17 +1174,7 @@ class UIRenderer {
      */
     openCategoryModal() {
         this.renderCategoryList();
-        if (this.dom.categoryModal) {
-            this.dom.categoryModal.style.display = 'flex';
-            
-            // 确保关闭按钮可以正常工作
-            const closeBtn = this.dom.categoryModal.querySelector('.close-btn');
-            if (closeBtn) {
-                closeBtn.onclick = () => {
-                    this.dom.categoryModal.style.display = 'none';
-                };
-            }
-        }
+        this.showModal(this.dom.categoryModal);
     }
     
     /**
@@ -1337,43 +1539,105 @@ class UIRenderer {
      * 处理导入数据
      */
     handleImportData() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
+        // 创建文件输入元素
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json,application/json';
         
-        input.onchange = (e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const content = e.target?.result;
-                    if (typeof content !== 'string') return;
-                    
-                    // 导入非加密数据
-                    if (dataManager.importData(content, false)) {
-                        this.showNotification(t('data_import_success'), 'success');
-                        this.init();
-                    } else {
-                        this.showNotification(t('data_import_failed'), 'error');
-                    }
-                };
-                reader.readAsText(file);
+        // 监听文件选择
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // 检查文件大小
+            if (file.size > 10 * 1024 * 1024) { // 10MB
+                this.showNotification(t('import_error') + ': ' + '文件过大', 'error');
+                return;
             }
-        };
+            
+            // 添加导入中提示
+            this.showNotification(t('importing_data'), 'info');
+            
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                const data = event.target.result;
+                
+                // 检测是否为加密数据
+                const isEncrypted = data.startsWith('U2F') || data.includes('AES');
+                
+                if (isEncrypted) {
+                    // 弹出密码输入框
+                    const password = prompt(t('enter_import_password'));
+                    if (password === null) return; // 用户取消
+                    
+                    // 尝试导入
+                    if (dataManager.importData(data, true, password)) {
+                        this.showNotification(t('import_success'), 'success');
+                        this.renderCategoryMenu();
+                        this.renderSites();
+                    } else {
+                        this.showNotification(t('import_error'), 'error');
+                    }
+                } else {
+                    // 非加密数据直接导入
+                    if (dataManager.importData(data)) {
+                        this.showNotification(t('import_success'), 'success');
+                        this.renderCategoryMenu();
+                        this.renderSites();
+                    } else {
+                        this.showNotification(t('import_error'), 'error');
+                    }
+                }
+            };
+            
+            reader.onerror = () => {
+                this.showNotification(t('import_error'), 'error');
+            };
+            
+            // 读取文件
+            reader.readAsText(file);
+        });
         
-        // 在防重复执行标记重置之前点击，确保只执行一次
-        input.click();
+        // 触发文件选择
+        fileInput.click();
     }
     
     /**
      * 处理导出数据
      */
     handleExportData() {
-        console.log('处理导出数据');
+        // 询问是否包含备份历史
+        const includeBackups = confirm(t('include_backups_confirm'));
         
-        // 直接导出非加密数据
-        const exportData = dataManager.exportData(false);
-        this.downloadData(exportData, 'navigation_station_data.json');
+        // 询问是否加密
+        const encrypt = confirm(t('encrypt_export_confirm'));
+        
+        let password = null;
+        if (encrypt) {
+            // 弹出密码输入框
+            password = prompt(t('enter_export_password'));
+            if (password === null) return; // 用户取消
+            
+            // 确认密码
+            const confirmPassword = prompt(t('confirm_export_password'));
+            if (confirmPassword !== password) {
+                this.showNotification(t('password_mismatch'), 'error');
+                return;
+            }
+        }
+        
+        // 导出数据
+        const data = dataManager.exportData(encrypt, password, includeBackups);
+        
+        // 生成文件名
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `vividDH_export_${timestamp}${encrypt ? '_encrypted' : ''}.json`;
+        
+        // 下载数据
+        this.downloadData(data, filename);
+        
+        this.showNotification(t('export_success'), 'success');
     }
     
     /**
@@ -1449,6 +1713,60 @@ class UIRenderer {
                 });
             }
         }
+    }
+
+    /**
+     * 显示模态框
+     * @param {Element|string} modal - 模态框元素或ID
+     */
+    showModal(modal) {
+        if (typeof modal === 'string') {
+            modal = document.getElementById(modal);
+        }
+        
+        if (!modal) return;
+        
+        // 确保所有其他模态框关闭
+        document.querySelectorAll('.modal').forEach(m => {
+            if (m !== modal && m.style.display !== 'none') {
+                m.style.display = 'none';
+            }
+        });
+        
+        // 显示模态框
+        modal.style.display = 'flex';
+        
+        // 触发显示事件
+        const event = new CustomEvent('modalshow', { bubbles: true });
+        modal.dispatchEvent(event);
+    }
+    
+    /**
+     * 隐藏模态框
+     * @param {Element|string} modal - 模态框元素或ID
+     */
+    hideModal(modal) {
+        if (typeof modal === 'string') {
+            modal = document.getElementById(modal);
+        }
+        
+        if (!modal) return;
+        
+        // 隐藏模态框
+        modal.style.display = 'none';
+        
+        // 触发隐藏事件
+        const event = new CustomEvent('modalhide', { bubbles: true });
+        modal.dispatchEvent(event);
+    }
+    
+    /**
+     * 隐藏所有模态框
+     */
+    hideAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => {
+            this.hideModal(modal);
+        });
     }
 }
 

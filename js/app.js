@@ -173,7 +173,7 @@ class App {
             } else if (hash === '#all' || hash === '') {
                 // 默认显示全部
                 if (uiRenderer) {
-                    uiRenderer.changeCategory('全部');
+                    uiRenderer.changeCategory('ALL');
                 }
             }
         } catch (error) {
@@ -187,60 +187,79 @@ class App {
     loadSampleData() {
         try {
             // 检查是否有网站数据，如果没有则加载样例数据
-            const sites = dataManager.getSites();
+            const sites = dataManager.getAllSites();
             if (sites.length === 0) {
-                // 添加样例分类
-                const categories = ['常用', '购物', '工具', '学习', '娱乐'];
-                categories.forEach(category => dataManager.addCategory(category));
+                // 添加样例分类，使用国际化键名
+                const categoryKeys = ['frequently_used', 'shopping', 'tools', 'learning', 'entertainment'];
+                
+                // 清除已有分类
+                const existingCategories = dataManager.getCategories();
+                if (existingCategories.length > 0) {
+                    // 如果已有分类，不进行添加
+                    return;
+                }
+                
+                // 添加翻译后的分类
+                categoryKeys.forEach(key => {
+                    const categoryName = t(key); // 使用当前语言的翻译
+                    dataManager.addCategory(categoryName);
+                });
+                
+                // 获取刚添加的分类
+                const categories = dataManager.getCategories();
+                const frequentlyUsed = categories[0]; // 常用分类
+                const shopping = categories[1];       // 购物分类
+                const tools = categories[2];          // 工具分类 
+                const entertainment = categories[4];   // 娱乐分类
                 
                 // 添加样例网站
                 const sampleSites = [
                     {
                         name: '百度',
                         url: 'https://www.baidu.com',
-                        category: '常用',
+                        category: frequentlyUsed,
                         icon: 'https://www.baidu.com/favicon.ico'
                     },
                     {
                         name: '谷歌',
                         url: 'https://www.google.com',
-                        category: '常用',
+                        category: frequentlyUsed,
                         icon: 'https://www.google.com/favicon.ico'
                     },
                     {
                         name: '淘宝',
                         url: 'https://www.taobao.com',
-                        category: '购物',
+                        category: shopping,
                         icon: 'https://www.taobao.com/favicon.ico'
                     },
                     {
                         name: '京东',
                         url: 'https://www.jd.com',
-                        category: '购物',
+                        category: shopping,
                         icon: 'https://www.jd.com/favicon.ico'
                     },
                     {
                         name: '知乎',
                         url: 'https://www.zhihu.com',
-                        category: '工具',
+                        category: tools,
                         icon: 'https://www.zhihu.com/favicon.ico'
                     },
                     {
                         name: 'GitHub',
                         url: 'https://github.com',
-                        category: '工具',
+                        category: tools,
                         icon: 'https://github.com/favicon.ico'
                     },
                     {
                         name: '哔哩哔哩',
                         url: 'https://www.bilibili.com',
-                        category: '娱乐',
+                        category: entertainment,
                         icon: 'https://www.bilibili.com/favicon.ico'
                     },
                     {
                         name: '腾讯视频',
                         url: 'https://v.qq.com',
-                        category: '娱乐',
+                        category: entertainment,
                         icon: 'https://v.qq.com/favicon.ico'
                     }
                 ];

@@ -16,10 +16,13 @@ class DataManager {
             settings: 'navigationStationSettings'
         };
         
+        // 获取 frequently_used 的翻译
+        const defaultCategory = typeof t === 'function' ? t('frequently_used') : 'Frequently Used';
+        
         // 数据结构
         this.data = {
             sites: [],
-            categories: ['常用'],
+            categories: [defaultCategory],
             backups: [],
             settings: {
                 backupInterval: 7, // 默认7天自动备份
@@ -63,10 +66,13 @@ class DataManager {
                 this.data.settings = {...this.data.settings, ...JSON.parse(settingsData)};
             }
         } catch (error) {
+            // 获取 frequently_used 的翻译
+            const defaultCategory = typeof t === 'function' ? t('frequently_used') : 'Frequently Used';
+            
             // 加载数据失败时使用默认数据
             this.data = {
                 sites: [],
-                categories: ['常用'],
+                categories: [defaultCategory],
                 backups: [],
                 settings: {
                     backupInterval: 7,
@@ -117,26 +123,57 @@ class DataManager {
     
     /**
      * 备份当前数据
+     * @param {boolean} forceFull - 是否强制进行完整备份
+     * @returns {boolean} - 是否备份成功
      */
-    backup() {
-        const backupData = {
-            sites: [...this.data.sites],
-            categories: [...this.data.categories],
-            timestamp: new Date().toISOString()
-        };
-        
-        this.data.backups.unshift(backupData);
-        
-        // 限制备份数量
-        if (this.data.backups.length > this.data.settings.maxBackups) {
-            this.data.backups = this.data.backups.slice(0, this.data.settings.maxBackups);
+    backup(forceFull = false) {
+        try {
+            // 创建备份数据对象
+            const backupData = {
+                sites: [...this.data.sites],
+                categories: [...this.data.categories],
+                timestamp: new Date().toISOString(),
+                version: '1.1' // 版本号
+            };
+            
+            // 将备份数据添加到备份列表
+            this.data.backups.unshift(backupData);
+            
+            // 限制备份数量
+            if (this.data.backups.length > this.data.settings.maxBackups) {
+                this.data.backups = this.data.backups.slice(0, this.data.settings.maxBackups);
+            }
+            
+            // 更新最后备份时间
+            this.data.settings.lastBackup = new Date().toISOString();
+            
+            // 尝试保存到本地存储
+            try {
+                // 先尝试直接保存全部数据
+                this.saveData();
+                return true;
+            } catch (storageError) {
+                // 如果保存失败，可能是因为数据太大，尝试压缩或分块保存
+                if (forceFull) {
+                    // 如果是强制完整备份，则失败
+                    this.error('备份失败: localStorage 存储空间不足', storageError);
+                    return false;
+                }
+                
+                // 移除最旧的备份
+                if (this.data.backups.length > 1) {
+                    this.data.backups.pop();
+                    return this.saveData();
+                }
+                
+                // 如果还是不行，尝试清理备份列表
+                this.data.backups = [this.data.backups[0]];
+                return this.saveData();
+            }
+        } catch (e) {
+            this.error('创建备份失败:', e);
+            return false;
         }
-        
-        // 更新最后备份时间
-        this.data.settings.lastBackup = new Date().toISOString();
-        
-        // 保存到本地存储
-        this.saveData();
     }
     
     /**
@@ -145,21 +182,77 @@ class DataManager {
      * @returns {boolean} - 是否恢复成功
      */
     restoreFromBackup(index) {
-        if (index >= 0 && index < this.data.backups.length) {
+        try {
+            if (index < 0 || index >= this.data.backups.length) {
+                this.error('恢复备份失败: 无效的备份索引');
+                return false;
+            }
+            
             const backup = this.data.backups[index];
             
-            // 先备份当前数据
-            this.backup();
+            // 先创建当前状态的备份
+            const currentBackup = {
+                sites: [...this.data.sites],
+                categories: [...this.data.categories],
+                timestamp: new Date().toISOString(),
+                version: '1.1',
+                isAutoBackup: true
+            };
+            
+            // 将当前备份添加到备份列表开头
+            this.data.backups.unshift(currentBackup);
+            
+            // 检查版本兼容性
+            const backupVersion = backup.version || '1.0';
+            const currentVersion = '1.1';
             
             // 恢复数据
             this.data.sites = [...backup.sites];
             this.data.categories = [...backup.categories];
             
+            // 版本迁移处理
+            if (backupVersion !== currentVersion) {
+                // 执行版本迁移
+                this.migrateDataVersion(backupVersion, currentVersion);
+            }
+            
             // 保存到本地存储
             this.saveData();
             
             return true;
+        } catch (e) {
+            this.error('恢复备份失败:', e);
+            return false;
         }
+    }
+    
+    /**
+     * 数据版本迁移
+     * @param {string} fromVersion - 原版本号
+     * @param {string} toVersion - 目标版本号
+     * @returns {boolean} - 是否迁移成功
+     */
+    migrateDataVersion(fromVersion, toVersion) {
+        // 版本升级逻辑
+        if (fromVersion === '1.0' && toVersion === '1.1') {
+            // 版本1.0到1.1的升级
+            // 例如：添加新的默认字段
+            this.data.sites.forEach(site => {
+                // 确保每个站点有 visits 字段
+                if (typeof site.visits === 'undefined') {
+                    site.visits = 0;
+                }
+                
+                // 添加 lastUpdated 字段
+                if (!site.lastUpdated) {
+                    site.lastUpdated = site.dateAdded || new Date().toISOString();
+                }
+            });
+            
+            return true;
+        }
+        
+        // 其他版本迁移逻辑可以在这里添加
         
         return false;
     }
@@ -178,6 +271,10 @@ class DataManager {
      * @returns {Array} - 筛选后的网站列表
      */
     getSitesByCategory(category) {
+        // 处理特殊值'全部'，这是为了兼容旧代码
+        if (category === '全部') {
+            return [...this.data.sites];
+        }
         return this.data.sites.filter(site => site.category === category);
     }
     
@@ -195,6 +292,54 @@ class DataManager {
     }
     
     /**
+     * 验证并修复URL
+     * @param {string} url - 输入的URL
+     * @returns {string|null} - 修复后的URL，如果无法修复则返回null
+     */
+    validateAndFixUrl(url) {
+        try {
+            if (!url) return null;
+            
+            // 移除首尾空格
+            url = url.trim();
+            
+            // 添加协议前缀
+            if (!url.match(/^https?:\/\//i)) {
+                url = 'https://' + url;
+            }
+            
+            // 处理常见错误格式
+            // 修正多个斜杠问题 (例如 http:////example.com)
+            url = url.replace(/([^:])\/+/g, '$1/');
+            
+            // 移除URL中的空格
+            url = url.replace(/\s+/g, '');
+            
+            // 处理特殊字符
+            url = encodeURI(decodeURI(url));
+            
+            // 尝试创建URL对象验证
+            const urlObj = new URL(url);
+            
+            // 确保域名部分有效（至少有一个点）
+            if (!urlObj.hostname.includes('.') && !['localhost', '127.0.0.1'].includes(urlObj.hostname)) {
+                return null;
+            }
+            
+            // 确保协议是http或https
+            if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                urlObj.protocol = 'https:';
+                return urlObj.toString();
+            }
+            
+            return url;
+        } catch (e) {
+            this.error('URL验证失败:', e);
+            return null;
+        }
+    }
+    
+    /**
      * 添加网站
      * @param {Object} site - 网站信息
      * @returns {boolean} - 是否添加成功
@@ -208,9 +353,13 @@ class DataManager {
             }
             
             // 修复URL格式
-            if (!site.url.match(/^https?:\/\//)) {
-                site.url = 'https://' + site.url;
+            const validUrl = this.validateAndFixUrl(site.url);
+            if (!validUrl) {
+                this.error('添加网站失败: 无效的URL');
+                return false;
             }
+            
+            site.url = validUrl;
             
             // 添加ID和访问次数
             const newSite = {
@@ -268,8 +417,13 @@ class DataManager {
             }
             
             // 修复URL格式
-            if (updates.url && !updates.url.match(/^https?:\/\//)) {
-                updates.url = 'https://' + updates.url;
+            if (updates.url) {
+                const validUrl = this.validateAndFixUrl(updates.url);
+                if (!validUrl) {
+                    this.error('更新网站失败: 无效的URL');
+                    return false;
+                }
+                updates.url = validUrl;
             }
             
             // 处理敏感数据
@@ -601,31 +755,64 @@ class DataManager {
      * 导出数据
      * @param {boolean} encrypt - 是否加密
      * @param {string} password - 加密密码（如果加密）
+     * @param {boolean} includeBackups - 是否包含备份历史
      * @returns {string} - 导出的数据（JSON字符串）
      */
-    exportData(encrypt = false, password = null) {
-        // 构建导出数据
-        const exportData = {
-            sites: this.data.sites,
-            categories: this.data.categories,
-            exportTime: new Date().toISOString(),
-            version: '1.0'
-        };
-        
-        // 将数据转换为JSON字符串
-        let dataString = JSON.stringify(exportData, null, 2);
-        
-        // 是否加密
-        if (encrypt && password) {
-            try {
-                return this.encryptText(dataString, password);
-            } catch (e) {
-                this.error('导出加密数据失败:', e);
-                return dataString;
+    exportData(encrypt = false, password = null, includeBackups = false) {
+        try {
+            // 构建导出数据
+            const exportData = {
+                sites: this.data.sites,
+                categories: this.data.categories,
+                backups: includeBackups ? this.data.backups : [],
+                exportTime: new Date().toISOString(),
+                version: '1.1',
+                dataStructure: {
+                    sites: {
+                        fields: ['id', 'name', 'url', 'category', 'notes', 'visits', 'lastVisit', 'dateAdded', 'lastUpdated', 'iconUrl', 'isEncrypted']
+                    },
+                    categories: {
+                        type: 'array',
+                        elementType: 'string'
+                    }
+                }
+            };
+            
+            // 估算JSON大小
+            const dataSize = JSON.stringify(exportData).length;
+            const sizeInMB = dataSize / (1024 * 1024);
+            
+            // 如果数据太大，移除备份历史
+            if (sizeInMB > 4 && includeBackups) {
+                exportData.backups = [];
+                exportData._backupsOmitted = true;
             }
+            
+            // 将数据转换为JSON字符串
+            let dataString = JSON.stringify(exportData, null, 2);
+            
+            // 是否加密
+            if (encrypt && password) {
+                try {
+                    return this.encryptText(dataString, password);
+                } catch (e) {
+                    this.error('导出加密数据失败:', e);
+                    return dataString;
+                }
+            }
+            
+            return dataString;
+        } catch (e) {
+            this.error('导出数据失败:', e);
+            // 返回基本数据
+            return JSON.stringify({
+                sites: this.data.sites,
+                categories: this.data.categories,
+                exportTime: new Date().toISOString(),
+                version: '1.1',
+                exportError: true
+            });
         }
-        
-        return dataString;
     }
     
     /**
@@ -662,14 +849,45 @@ class DataManager {
             // 备份当前数据
             this.backup();
             
+            // 获取数据版本
+            const importVersion = jsonData.version || '1.0';
+            const currentVersion = '1.1';
+            
             // 导入数据
             this.data.sites = jsonData.sites;
             this.data.categories = jsonData.categories;
             
-            // 保存到本地存储
-            this.saveData();
+            // 可选导入备份历史
+            if (jsonData.backups && Array.isArray(jsonData.backups) && jsonData.backups.length > 0) {
+                // 添加导入的备份，但限制数量
+                const combinedBackups = [
+                    ...this.data.backups,
+                    ...jsonData.backups
+                ];
+                
+                // 保留最近的maxBackups个备份
+                this.data.backups = combinedBackups
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    .slice(0, this.data.settings.maxBackups);
+            }
             
-            return true;
+            // 版本迁移
+            if (importVersion !== currentVersion) {
+                this.migrateDataVersion(importVersion, currentVersion);
+            }
+            
+            // 保存到本地存储
+            try {
+                this.saveData();
+                return true;
+            } catch (storageError) {
+                // 如果保存失败，可能是因为数据太大
+                this.error('导入数据保存失败: localStorage 存储空间不足', storageError);
+                
+                // 移除备份历史，只保留基本数据
+                this.data.backups = [];
+                return this.saveData();
+            }
         } catch (e) {
             this.error('导入数据失败:', e);
             return false;

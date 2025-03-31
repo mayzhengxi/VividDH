@@ -3,8 +3,19 @@
  * 负责多语言支持和语言切换
  */
 
-// 默认显示英文
+// 初始化语言设置，优先从本地存储中读取
 let currentLanguage = 'en-US';
+
+// 尝试从本地存储获取用户之前设置的语言
+try {
+    const savedLanguage = localStorage.getItem('language');
+    if (savedLanguage && (savedLanguage === 'zh-CN' || savedLanguage === 'en-US')) {
+        currentLanguage = savedLanguage;
+    }
+} catch (error) {
+    // 如果出错则使用默认的英文
+    currentLanguage = 'en-US';
+}
 
 // 禁用日志输出
 const log = () => {};
@@ -104,7 +115,17 @@ const resources = {
         'contains_notes': '包含备注信息',
         'feature_disabled': '该功能已禁用',
         'chinese': '中文',
-        'english': '英文'
+        'english': '英文',
+        'importing_data': '正在导入数据...',
+        'enter_import_password': '请输入导入文件的密码',
+        'enter_export_password': '请输入导出文件的密码',
+        'confirm_export_password': '请再次输入密码确认',
+        'password_mismatch': '两次输入的密码不匹配',
+        'include_backups_confirm': '是否包含备份历史数据？（文件会更大）',
+        'file_too_large': '文件太大，无法导入',
+        'backup_limit_reached': '备份数量已达上限，最早的备份将被删除',
+        'storage_limit_reached': '本地存储空间不足',
+        'decrypt_failed': '解密失败，请检查密码是否正确'
     },
     'en-US': {
         'app_name': 'VividDH',
@@ -198,7 +219,17 @@ const resources = {
         'contains_notes': 'Contains notes',
         'feature_disabled': 'This feature is disabled',
         'chinese': 'Chinese',
-        'english': 'English'
+        'english': 'English',
+        'importing_data': 'Importing data...',
+        'enter_import_password': 'Enter the password for the import file',
+        'enter_export_password': 'Enter a password for the export file',
+        'confirm_export_password': 'Confirm the password',
+        'password_mismatch': 'Passwords do not match',
+        'include_backups_confirm': 'Include backup history? (File will be larger)',
+        'file_too_large': 'File is too large to import',
+        'backup_limit_reached': 'Backup limit reached, oldest backup will be deleted',
+        'storage_limit_reached': 'Local storage limit reached',
+        'decrypt_failed': 'Failed to decrypt, please check your password'
     }
 };
 
